@@ -160,13 +160,18 @@ class MainWindow(QMainWindow):
 
     def _connect_cross_view_signals(self) -> None:
         """连接跨视图交互：搜索结果中下载选中文献。"""
-        # 在搜索页双击结果行时，跳转到下载
-        self._search_view._table.doubleClicked.connect(self._on_paper_double_clicked)
+        self._search_view.download_requested.connect(self._on_download_requested)
+        self._search_view.paper_double_clicked.connect(self._on_paper_double_clicked)
 
-    def _on_paper_double_clicked(self, index) -> None:
-        papers = self._search_view.get_selected_papers()
-        if papers:
-            self._download_vm.download(papers)
+    def _on_download_requested(self, papers: list) -> None:
+        """Handle download request from SearchView."""
+        self._download_vm.download(papers)
+        self._switch_page(1)
+
+    def _on_paper_double_clicked(self, paper) -> None:
+        """Handle paper double-click: download that specific paper."""
+        if paper:
+            self._download_vm.download([paper])
             self._switch_page(1)
 
     def _campus_login(self) -> None:
