@@ -12,12 +12,14 @@ class SearchQuery:
     """搜索查询参数"""
 
     keyword: str
+    extra_keywords: list[str] = field(default_factory=list)
     author: str = ""
     journal: str = ""
     start_date: str = ""
     end_date: str = ""
     page: int = 1
     page_size: int = 20
+    source_types: str = ""  # 数据库类型过滤，如 "CJFQ" 仅期刊
 
 
 @dataclass

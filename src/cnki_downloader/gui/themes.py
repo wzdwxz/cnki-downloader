@@ -30,6 +30,12 @@ QWidget#sidebar QPushButton:checked {
 QWidget#content {
     background-color: #ffffff;
 }
+QLabel {
+    color: #333333;
+}
+QCheckBox {
+    color: #333333;
+}
 QLineEdit {
     padding: 8px 12px;
     border: 1px solid #ddd;
@@ -113,15 +119,36 @@ QSpinBox {
     padding: 6px 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
+    background-color: #ffffff;
+    color: #333333;
 }
 QListWidget {
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     background-color: #ffffff;
 }
+QPushButton {
+    background-color: #f0f0f0;
+    color: #333333;
+    border: 1px solid #ccc;
+    padding: 6px 14px;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background-color: #e0e0e0;
+}
 QSplitter::handle {
     background-color: #e0e0e0;
     width: 2px;
+}
+QDialog {
+    background-color: #ffffff;
+}
+QMessageBox {
+    background-color: #ffffff;
+}
+QGroupBox::title {
+    color: #333333;
 }
 """
 

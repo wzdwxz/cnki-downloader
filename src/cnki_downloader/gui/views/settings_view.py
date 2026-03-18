@@ -34,7 +34,7 @@ class SettingsView(QWidget):
         layout.setSpacing(16)
 
         title = QLabel("设置")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #333;")
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
         layout.addWidget(title)
 
         # 下载设置
@@ -97,12 +97,25 @@ class SettingsView(QWidget):
         config_file = config_dir / "config.toml"
 
         try:
+            # 验证延迟值为合法数字
+            try:
+                min_delay = float(self._min_delay_input.text())
+                max_delay = float(self._max_delay_input.text())
+            except ValueError:
+                QMessageBox.warning(self, "输入错误", "延迟值必须为数字")
+                return
+            if min_delay > max_delay:
+                QMessageBox.warning(self, "输入错误", "最小延迟不能大于最大延迟")
+                return
+
+            # 转义路径中的反斜杠以生成合法 TOML
+            download_dir = self._dir_input.text().replace("\\", "\\\\")
             lines = [
-                f'download_dir = "{self._dir_input.text()}"',
+                f'download_dir = "{download_dir}"',
                 f"max_concurrent_downloads = {self._concurrent_spin.value()}",
                 f"auto_convert_caj = {'true' if self._auto_convert_cb.isChecked() else 'false'}",
-                f"min_request_delay = {self._min_delay_input.text()}",
-                f"max_request_delay = {self._max_delay_input.text()}",
+                f"min_request_delay = {min_delay}",
+                f"max_request_delay = {max_delay}",
             ]
             config_file.write_text("\n".join(lines), encoding="utf-8")
             QMessageBox.information(self, "成功", "设置已保存")

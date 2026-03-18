@@ -22,7 +22,7 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("登录知网")
-        self.setFixedSize(400, 280)
+        self.setFixedSize(480, 320)
         self._username: str = ""
         self._password: str = ""
         self._remember: bool = False
@@ -48,10 +48,12 @@ class LoginDialog(QDialog):
 
         self._username_input = QLineEdit()
         self._username_input.setPlaceholderText("手机号/邮箱")
+        self._username_input.setMinimumWidth(320)
         form.addRow("账号:", self._username_input)
 
         self._password_input = QLineEdit()
         self._password_input.setPlaceholderText("密码")
+        self._password_input.setMinimumWidth(320)
         self._password_input.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("密码:", self._password_input)
 

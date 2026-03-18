@@ -83,6 +83,10 @@ def _build_search_params(query: SearchQuery) -> dict[str, str]:
         "__": "",
     }
 
+    # 数据库类型过滤（如仅期刊 CJFQ）
+    if query.source_types:
+        params["db_opt"] = query.source_types
+
     # 主题/关键词搜索（第一个检索条件）
     params["txt_1_sel"] = "SU$%=|"
     params["txt_1_value1"] = query.keyword
@@ -90,6 +94,14 @@ def _build_search_params(query: SearchQuery) -> dict[str, str]:
 
     # 高级搜索条件序号
     field_index = 2
+
+    # 额外关键词条件（AND关系）
+    for extra_kw in query.extra_keywords:
+        params[f"txt_{field_index}_sel"] = "SU$%=|"
+        params[f"txt_{field_index}_value1"] = extra_kw
+        params[f"txt_{field_index}_special1"] = "%"
+        params[f"txt_{field_index}_relation"] = "#DIFFAND"
+        field_index += 1
 
     # 作者条件
     if query.author:
