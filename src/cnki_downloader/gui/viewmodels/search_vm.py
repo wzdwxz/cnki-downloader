@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from cnki_downloader.gui.workers.browser_thread import BrowserThread
 from cnki_downloader.gui.workers.search_worker import SearchWorker
 from cnki_downloader.models.paper import Paper
 from cnki_downloader.models.search_result import SearchQuery, SearchResult
@@ -27,6 +28,11 @@ class SearchViewModel(QObject):
         self._current_query: SearchQuery | None = None
         self._worker: SearchWorker | None = None
         self._loading: bool = False
+        self._source_types: list[str] = []
+
+        # 持久化浏览器线程
+        self._browser_thread = BrowserThread()
+        self._browser_thread.start()
 
     @property
     def papers(self) -> list[Paper]:
@@ -72,14 +78,16 @@ class SearchViewModel(QObject):
         self._set_loading(True)
 
         self._worker = SearchWorker(
-            self._current_query, source_types=self._source_types
+            self._current_query,
+            self._browser_thread,
+            source_types=self._source_types,
         )
         self._worker.finished.connect(self._on_search_finished)
         self._worker.error.connect(self._on_search_error)
         self._worker.start()
 
     def cancel(self) -> None:
-        """Cancel running search and wait for worker to finish."""
+        """Cancel running search and shut down browser thread."""
         if self._worker and self._worker.isRunning():
             self._worker.wait(3000)
             if self._worker.isRunning():
@@ -87,6 +95,7 @@ class SearchViewModel(QObject):
                 self._worker.wait(1000)
             self._loading = False
             self.loading_changed.emit(False)
+        self._browser_thread.shutdown()
 
     def next_page(self) -> None:
         if self._current_query:
