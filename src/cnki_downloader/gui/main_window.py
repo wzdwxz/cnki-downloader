@@ -96,8 +96,16 @@ class MainWindow(QMainWindow):
         self._theme_btn.clicked.connect(self._toggle_theme)
         sidebar_layout.addWidget(self._theme_btn)
 
-        # 登录按钮
-        self._login_btn = QPushButton("登录账号")
+        # 机构登录按钮（校园网 / 机构认证）
+        self._campus_btn = QPushButton("机构登录")
+        self._campus_btn.setStyleSheet(
+            "color: #aaa; border-top: 1px solid #444; padding: 12px 20px;"
+        )
+        self._campus_btn.clicked.connect(self._campus_login)
+        sidebar_layout.addWidget(self._campus_btn)
+
+        # 账号登录按钮
+        self._login_btn = QPushButton("账号登录")
         self._login_btn.setStyleSheet(
             "color: #aaa; border-top: 1px solid #444; padding: 12px 20px;"
         )
@@ -161,6 +169,28 @@ class MainWindow(QMainWindow):
             self._download_vm.download(papers)
             self._switch_page(1)
 
+    def _campus_login(self) -> None:
+        """打开知网页面进行机构认证，完成后自动保存 Cookie。"""
+        self._campus_btn.setText("正在打开浏览器...")
+        self._campus_btn.setEnabled(False)
+        self._campus_thread = CampusLoginThread()
+        self._campus_thread.success.connect(self._on_campus_success)
+        self._campus_thread.error.connect(self._on_campus_error)
+        self._campus_thread.start()
+
+    def _on_campus_success(self, msg: str) -> None:
+        self._campus_btn.setText("机构登录")
+        self._campus_btn.setEnabled(True)
+        self.statusBar().showMessage(msg, 5000)
+        # 直接更新网络状态为已认证
+        self._network_label.setText("网络: 已通过机构认证")
+        self._network_label.setStyleSheet("color: green;")
+
+    def _on_campus_error(self, error_msg: str) -> None:
+        self._campus_btn.setText("机构登录")
+        self._campus_btn.setEnabled(True)
+        QMessageBox.warning(self, "机构登录", error_msg)
+
     def _show_login(self) -> None:
         dialog = LoginDialog(self)
         if dialog.exec() == LoginDialog.DialogCode.Accepted:
@@ -180,7 +210,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("登录成功", 3000)
 
     def _on_login_error(self, error_msg: str) -> None:
-        self._login_btn.setText("登录账号")
+        self._login_btn.setText("账号登录")
         self._login_btn.setEnabled(True)
         QMessageBox.warning(self, "登录失败", error_msg)
 
@@ -194,7 +224,6 @@ class MainWindow(QMainWindow):
             self._current_theme = "light"
             self._theme_btn.setText("切换暗色主题")
 
-        app = QMainWindow.sender(self)  # noqa
         from PyQt6.QtWidgets import QApplication
         QApplication.instance().setStyleSheet(get_theme(self._current_theme))
 
@@ -202,9 +231,36 @@ class MainWindow(QMainWindow):
         if has_access:
             self._network_label.setText("网络: 已连接校园网")
             self._network_label.setStyleSheet("color: green;")
+        elif self._has_saved_cookies():
+            self._network_label.setText("网络: 已有机构认证Cookie")
+            self._network_label.setStyleSheet("color: green;")
         else:
             self._network_label.setText("网络: 未连接校园网")
             self._network_label.setStyleSheet("color: #cc7700;")
+
+    def closeEvent(self, event) -> None:
+        """Ensure any running search worker is stopped before exit."""
+        if hasattr(self, '_search_vm'):
+            self._search_vm.cancel()
+        super().closeEvent(event)
+
+    @staticmethod
+    def _has_saved_cookies() -> bool:
+        """检查本地是否有已保存的机构认证 Cookie。"""
+        import json
+        try:
+            from cnki_downloader.utils.config import get_config_dir
+            cookie_file = get_config_dir() / "browser_state.json"
+        except Exception:
+            from pathlib import Path
+            cookie_file = Path.home() / ".cnki_downloader" / "browser_state.json"
+        if cookie_file.exists():
+            try:
+                data = json.loads(cookie_file.read_text(encoding="utf-8"))
+                return bool(data.get("cookies"))
+            except Exception:
+                pass
+        return False
 
 
 class NetworkCheckThread(QThread):
@@ -255,3 +311,79 @@ class LoginThread(QThread):
             await login(session, credential)
             if self._remember:
                 save_credential(credential)
+
+
+class CampusLoginThread(QThread):
+    """打开浏览器让用户完成机构认证，完成后保存 Cookie。"""
+
+    success = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def run(self) -> None:
+        try:
+            asyncio.run(self._open_browser())
+        except Exception as e:
+            self.error.emit(str(e))
+
+    async def _open_browser(self) -> None:
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            self.error.emit(
+                "需要安装 Playwright：\n"
+                "pip install playwright && python -m playwright install chromium"
+            )
+            return
+
+        import json
+        from pathlib import Path
+
+        # Cookie 存储路径
+        try:
+            from cnki_downloader.utils.config import get_config_dir
+            cookie_dir = get_config_dir()
+        except Exception:
+            cookie_dir = Path.home() / ".cnki_downloader"
+            cookie_dir.mkdir(parents=True, exist_ok=True)
+        cookie_file = cookie_dir / "browser_state.json"
+
+        async with async_playwright() as pw:
+            # 检查已有 Cookie
+            ctx_kwargs = {
+                "viewport": {"width": 1400, "height": 900},
+                "user_agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+            }
+            if cookie_file.exists():
+                try:
+                    data = json.loads(cookie_file.read_text(encoding="utf-8"))
+                    if data.get("cookies"):
+                        ctx_kwargs["storage_state"] = str(cookie_file)
+                except Exception:
+                    pass
+
+            # 有头模式打开浏览器，让用户操作
+            browser = await pw.chromium.launch(headless=False, slow_mo=100)
+            context = await browser.new_context(**ctx_kwargs)
+            page = await context.new_page()
+
+            # 导航到知网首页（机构网络会自动识别）
+            await page.goto("https://www.cnki.net", timeout=30000)
+
+            # 等待用户操作完成 — 监测页面变化
+            # 当用户完成登录/认证后关闭浏览器窗口即可
+            try:
+                await page.wait_for_event("close", timeout=300000)
+            except Exception:
+                pass
+
+            # 保存 Cookie
+            cookie_file.parent.mkdir(parents=True, exist_ok=True)
+            state = await context.storage_state(path=str(cookie_file))
+            cookie_count = len(state.get("cookies", []))
+            await browser.close()
+
+            self.success.emit(f"机构认证完成，已保存 {cookie_count} 条 Cookie")

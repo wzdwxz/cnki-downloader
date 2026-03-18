@@ -52,6 +52,7 @@ class SearchViewModel(QObject):
         start_date: str = "",
         end_date: str = "",
         page: int = 1,
+        source_types: list[str] | None = None,
     ) -> None:
         """发起搜索。"""
         if self._loading:
@@ -66,13 +67,26 @@ class SearchViewModel(QObject):
             page=page,
         )
         self._current_page = page
+        self._source_types = source_types or []
 
         self._set_loading(True)
 
-        self._worker = SearchWorker(self._current_query)
+        self._worker = SearchWorker(
+            self._current_query, source_types=self._source_types
+        )
         self._worker.finished.connect(self._on_search_finished)
         self._worker.error.connect(self._on_search_error)
         self._worker.start()
+
+    def cancel(self) -> None:
+        """Cancel running search and wait for worker to finish."""
+        if self._worker and self._worker.isRunning():
+            self._worker.wait(3000)
+            if self._worker.isRunning():
+                self._worker.terminate()
+                self._worker.wait(1000)
+            self._loading = False
+            self.loading_changed.emit(False)
 
     def next_page(self) -> None:
         if self._current_query:
@@ -83,6 +97,7 @@ class SearchViewModel(QObject):
                 start_date=self._current_query.start_date,
                 end_date=self._current_query.end_date,
                 page=self._current_page + 1,
+                source_types=self._source_types,
             )
 
     def prev_page(self) -> None:
@@ -94,6 +109,7 @@ class SearchViewModel(QObject):
                 start_date=self._current_query.start_date,
                 end_date=self._current_query.end_date,
                 page=self._current_page - 1,
+                source_types=self._source_types,
             )
 
     def _set_loading(self, loading: bool) -> None:
