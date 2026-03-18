@@ -171,6 +171,38 @@ TASKS = [
         source_types=["期刊"],
         max_papers=10,
     ),
+    SearchTask(
+        name="组织公正+公共部门+绩效",
+        keywords=["组织公正", "公共部门", "绩效"],
+        start_year=2020,
+        end_year=2025,
+        source_types=["期刊"],
+        max_papers=10,
+    ),
+    SearchTask(
+        name="公平氛围+跨层次",
+        keywords=["公平氛围", "跨层次"],
+        start_year=2018,
+        end_year=2025,
+        source_types=["期刊"],
+        max_papers=10,
+    ),
+    SearchTask(
+        name="领导成员交换差异化+公平",
+        keywords=["领导成员交换差异化", "公平"],
+        start_year=2018,
+        end_year=2025,
+        source_types=["期刊"],
+        max_papers=10,
+    ),
+    SearchTask(
+        name="组织承诺+公务员+公平",
+        keywords=["组织承诺", "公务员", "公平"],
+        start_year=2020,
+        end_year=2025,
+        source_types=["期刊"],
+        max_papers=10,
+    ),
 ]
 
 def _parse_int_arg(*flags: str, default: int = 0) -> int:
