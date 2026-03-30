@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cnki": {
+      "command": "python",
+      "args": ["-m", "cnki_downloader.mcp_server"],
+      "cwd": "D:\\AI_Project\\cnki_downloader"
+    }
+  }
+}

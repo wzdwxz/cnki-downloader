@@ -23,7 +23,19 @@ class TestCLIHelp:
         assert "convert" in result.stdout
         assert "gui" in result.stdout
         assert "auth" in result.stdout
-        assert "library" in result.stdout
+        assert "library" not in result.stdout
+
+    def test_root_without_args_shows_help(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "cnki_downloader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0
+        assert "search" in result.stdout
+        assert "download" in result.stdout
+        assert "convert" in result.stdout
 
     def test_search_help(self) -> None:
         result = self._run("search")
@@ -56,11 +68,7 @@ class TestCLIHelp:
 
     def test_library_help(self) -> None:
         result = self._run("library")
-        assert result.returncode == 0
-        assert "list" in result.stdout
-        assert "export" in result.stdout
-        assert "tag" in result.stdout
-        assert "category" in result.stdout
+        assert result.returncode != 0
 
 
 class TestCLIImports:
@@ -85,7 +93,6 @@ from cnki_downloader.models.download_task import DownloadTask, TaskStatus
 from cnki_downloader.services.search_service import SearchService
 from cnki_downloader.services.download_service import DownloadService
 from cnki_downloader.services.auth_service import AuthService
-from cnki_downloader.services.library_service import LibraryService
 from cnki_downloader.utils.config import load_config
 print("OK")
 """],

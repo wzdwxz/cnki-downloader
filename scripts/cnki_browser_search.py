@@ -18,7 +18,6 @@ import io
 import json
 import re
 import sys
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -163,45 +162,55 @@ class SearchTask:
 
 
 TASKS = [
+    # Q方法论相关文献
     SearchTask(
-        name="组织公平+公务员",
-        keywords=["组织公平", "公务员"],
-        start_year=2020,
-        end_year=2025,
+        name="Q方法论",
+        keywords=["Q方法论"],
+        start_year=2015,
+        end_year=2026,
         source_types=["期刊"],
-        max_papers=10,
+        max_papers=20,
     ),
     SearchTask(
-        name="组织公正+公共部门+绩效",
-        keywords=["组织公正", "公共部门", "绩效"],
-        start_year=2020,
-        end_year=2025,
+        name="Q方法+公共管理",
+        keywords=["Q方法", "公共管理"],
+        start_year=2010,
+        end_year=2026,
         source_types=["期刊"],
-        max_papers=10,
+        max_papers=20,
     ),
     SearchTask(
-        name="公平氛围+跨层次",
-        keywords=["公平氛围", "跨层次"],
+        name="Q方法+公务员",
+        keywords=["Q方法", "公务员"],
+        start_year=2010,
+        end_year=2026,
+        source_types=["期刊", "学位论文"],
+        max_papers=20,
+    ),
+    # 感知组织绩效文献
+    SearchTask(
+        name="感知组织绩效",
+        keywords=["感知组织绩效"],
+        start_year=2015,
+        end_year=2026,
+        source_types=["期刊"],
+        max_papers=20,
+    ),
+    SearchTask(
+        name="公共组织绩效+测量",
+        keywords=["公共组织绩效", "测量"],
+        start_year=2015,
+        end_year=2026,
+        source_types=["期刊"],
+        max_papers=20,
+    ),
+    SearchTask(
+        name="政府绩效+主观测量",
+        keywords=["政府绩效", "主观"],
         start_year=2018,
-        end_year=2025,
+        end_year=2026,
         source_types=["期刊"],
-        max_papers=10,
-    ),
-    SearchTask(
-        name="领导成员交换差异化+公平",
-        keywords=["领导成员交换差异化", "公平"],
-        start_year=2018,
-        end_year=2025,
-        source_types=["期刊"],
-        max_papers=10,
-    ),
-    SearchTask(
-        name="组织承诺+公务员+公平",
-        keywords=["组织承诺", "公务员", "公平"],
-        start_year=2020,
-        end_year=2025,
-        source_types=["期刊"],
-        max_papers=10,
+        max_papers=15,
     ),
 ]
 
@@ -388,9 +397,9 @@ async def do_search(page, task: SearchTask) -> list[PaperInfo]:
         ).first
         await search_btn.click()
 
-    except Exception as e:
+    except Exception:
         # 表单操作失败，直接用 URL 参数搜索
-        print(f"  高级搜索表单失败，切换到URL搜索...")
+        print("  高级搜索表单失败，切换到URL搜索...")
         src_codes = _resolve_source_codes(task.source_types)
         from urllib.parse import quote
         # 多关键词用空格拼接，kns8s 的 kw 参数支持空格分词 AND 搜索
@@ -651,9 +660,6 @@ async def download_paper_pdf(
             print(f"    [FAIL] 未找到下载按钮: {safe_title}")
             await detail_page.close()
             return None
-
-        # 尝试获取下载链接的href，先直接导航下载
-        href = await pdf_btn.get_attribute("href")
 
         # 方法1: 直接通过 expect_download 事件捕获下载
         try:

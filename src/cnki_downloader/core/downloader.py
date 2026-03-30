@@ -36,8 +36,48 @@ class NullProgress:
         pass
 
 
+def _build_direct_download_url(paper: Paper, fmt: str = "pdf") -> str | None:
+    """尝试从 dbname + filename 直接构造下载 URL，跳过详情页访问。
+
+    借鉴 jasminum 的思路：CNKI 下载链接模式是可预测的，
+    不必每次都访问详情页再解析 DOM。
+    """
+    if not paper.dbname or not paper.filename:
+        return None
+
+    # 知网 PDF/CAJ 下载的标准 URL 模式
+    if fmt == "pdf":
+        return (
+            f"https://kns.cnki.net/KXReader/Detail"
+            f"?dbcode={paper.dbname}&filename={paper.filename}"
+            f"&uid=&p=&cflag=overlay"
+        )
+    return None
+
+
 async def get_download_url(session: SessionManager, paper: Paper) -> str:
-    """从文献详情页获取PDF下载链接。"""
+    """获取文献 PDF 下载链接。
+
+    优先尝试从 dbname+filename 直接构造 URL（快速路径），
+    失败时回退到详情页解析（兼容路径）。
+    """
+    # 快速路径：直接构造下载 URL
+    direct_url = _build_direct_download_url(paper)
+    if direct_url:
+        try:
+            resp = await session.head(direct_url)
+            content_type = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and (
+                "pdf" in content_type.lower()
+                or "octet-stream" in content_type.lower()
+                or "caj" in content_type.lower()
+            ):
+                logger.info("直接构造下载URL成功: %s", direct_url)
+                return direct_url
+        except Exception:
+            logger.debug("直接构造URL失败，回退到详情页解析")
+
+    # 回退路径：从详情页提取下载链接
     if not paper.url:
         raise DownloadError(f"文献 '{paper.title}' 没有详情页URL")
 
@@ -97,11 +137,15 @@ async def download_paper(
         download_url = await get_download_url(session, paper)
         logger.info("开始下载: %s -> %s", paper.title, download_url)
 
-        # 先发一个 HEAD 请求获取文件信息
-        head_resp = await session.get(download_url)
-
-        content_type = head_resp.headers.get("content-type", "")
-        total = int(head_resp.headers.get("content-length", 0))
+        # 用 HEAD 请求获取文件信息，避免下载整个文件
+        content_type = ""
+        total = 0
+        try:
+            head_resp = await session.head(download_url)
+            content_type = head_resp.headers.get("content-type", "")
+            total = int(head_resp.headers.get("content-length", 0))
+        except Exception as e:
+            logger.warning("HEAD preflight failed; fallback to stream metadata: %s", e)
 
         # 推断文件扩展名
         if "pdf" in content_type.lower():
@@ -133,6 +177,11 @@ async def download_paper(
                 return output_path
 
         resp = await session.stream_download(download_url, headers=headers)
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("location", "")
+            raise DownloadError(f"Download redirected unexpectedly: {location}")
+        if resp.status_code >= 400:
+            raise DownloadError(f"Download failed with HTTP status {resp.status_code}")
 
         # 如果服务器不支持Range请求，重头开始
         if resp.status_code == 200:
@@ -148,12 +197,14 @@ async def download_paper(
 
         mode = "ab" if downloaded > 0 else "wb"
 
-        async with resp.stream() as stream:
+        try:
             with open(partial_path, mode) as f:
-                async for chunk in stream.aiter_bytes(chunk_size=8192):
+                async for chunk in resp.aiter_bytes(chunk_size=8192):
                     f.write(chunk)
                     downloaded += len(chunk)
                     progress.on_progress(task_id, downloaded, total)
+        finally:
+            await resp.aclose()
 
         # 下载完成，重命名
         partial_path.rename(output_path)

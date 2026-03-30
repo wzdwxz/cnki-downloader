@@ -55,11 +55,15 @@ class SearchWorker(QThread):
 
         try:
             page = await self._browser_thread.get_page()
-        except Exception:
-            raise RuntimeError(
-                "搜索需要 Playwright，请运行：\n"
-                "pip install playwright && python -m playwright install chromium"
-            )
+        except ModuleNotFoundError as e:
+            if e.name and e.name.startswith("playwright"):
+                raise RuntimeError(
+                    "搜索需要 Playwright，请运行：\n"
+                    "pip install playwright && python -m playwright install chromium"
+                ) from e
+            raise RuntimeError(f"搜索浏览器启动失败: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"搜索浏览器启动失败: {e}") from e
 
         try:
             return await self._do_search(page, query)
@@ -110,9 +114,11 @@ class SearchWorker(QThread):
             # 可能无结果，继续尝试解析
             await asyncio.sleep(1)
 
-        # 检查验证码
+        # 搜索复用的是无头浏览器，命中验证码时用户无法在当前页完成交互。
         if "verify" in page.url:
-            raise RuntimeError(
+            from cnki_downloader.core.exceptions import CaptchaRequiredError
+
+            raise CaptchaRequiredError(
                 "知网需要验证，请先通过侧边栏「机构登录」完成认证"
             )
 

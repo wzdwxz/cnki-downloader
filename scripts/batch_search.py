@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
@@ -20,13 +19,11 @@ from rich.progress import (
 from rich.table import Table
 
 from cnki_downloader.core.downloader import (
-    NullProgress,
     ProgressCallback,
     batch_download,
 )
 from cnki_downloader.core.search import search
 from cnki_downloader.core.session import SessionManager
-from cnki_downloader.models.paper import Paper
 from cnki_downloader.models.search_result import SearchQuery, SearchResult
 
 console = Console()

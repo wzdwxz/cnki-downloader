@@ -38,17 +38,20 @@ jobs:
   build:
     runs-on: windows-latest
     needs: [lint, test]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[gui,convert]" pyinstaller
+        run: pip install -e ".[all]" pyinstaller
+      - name: Install Chromium
+        run: python -m playwright install chromium
       - name: Build executable
         run: python scripts/build.py
       - uses: actions/upload-artifact@v4
         with:
           name: cnki_downloader-windows
-          path: dist/cnki_downloader.exe
+          path: dist/cnki_downloader/
+          compression-level: 9

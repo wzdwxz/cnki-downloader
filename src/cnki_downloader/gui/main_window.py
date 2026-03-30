@@ -20,10 +20,8 @@ from PyQt6.QtWidgets import (
 from cnki_downloader.core.auth import check_campus_network, login
 from cnki_downloader.core.session import SessionManager
 from cnki_downloader.gui.viewmodels.download_vm import DownloadViewModel
-from cnki_downloader.gui.viewmodels.library_vm import LibraryViewModel
 from cnki_downloader.gui.viewmodels.search_vm import SearchViewModel
 from cnki_downloader.gui.views.download_view import DownloadView
-from cnki_downloader.gui.views.library_view import LibraryView
 from cnki_downloader.gui.views.login_dialog import LoginDialog
 from cnki_downloader.gui.views.search_view import SearchView
 from cnki_downloader.gui.views.settings_view import SettingsView
@@ -43,7 +41,6 @@ class MainWindow(QMainWindow):
         # ViewModels
         self._search_vm = SearchViewModel()
         self._download_vm = DownloadViewModel()
-        self._library_vm = LibraryViewModel()
 
         self._init_ui()
         self._init_statusbar()
@@ -75,8 +72,7 @@ class MainWindow(QMainWindow):
         nav_items = [
             ("搜索文献", 0),
             ("下载管理", 1),
-            ("文献库", 2),
-            ("设置", 3),
+            ("设置", 2),
         ]
         for text, index in nav_items:
             btn = QPushButton(text)
@@ -125,13 +121,11 @@ class MainWindow(QMainWindow):
         # 页面
         self._search_view = SearchView(self._search_vm)
         self._download_view = DownloadView(self._download_vm)
-        self._library_view = LibraryView(self._library_vm)
         self._settings_view = SettingsView()
 
         self._stack.addWidget(self._search_view)       # 0
         self._stack.addWidget(self._download_view)      # 1
-        self._stack.addWidget(self._library_view)       # 2
-        self._stack.addWidget(self._settings_view)      # 3
+        self._stack.addWidget(self._settings_view)      # 2
 
         content_layout.addWidget(self._stack)
         main_layout.addWidget(content, stretch=1)
@@ -259,12 +253,12 @@ class MainWindow(QMainWindow):
         except Exception:
             from pathlib import Path
             cookie_file = Path.home() / ".cnki_downloader" / "browser_state.json"
-        if cookie_file.exists():
-            try:
+        try:
+            if cookie_file.exists():
                 data = json.loads(cookie_file.read_text(encoding="utf-8"))
                 return bool(data.get("cookies"))
-            except Exception:
-                pass
+        except (OSError, ValueError, TypeError):
+            pass
         return False
 
 
@@ -331,64 +325,7 @@ class CampusLoginThread(QThread):
             self.error.emit(str(e))
 
     async def _open_browser(self) -> None:
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            self.error.emit(
-                "需要安装 Playwright：\n"
-                "pip install playwright && python -m playwright install chromium"
-            )
-            return
+        from cnki_downloader.utils.browser_auth import complete_browser_verification
 
-        import json
-        from pathlib import Path
-
-        # Cookie 存储路径
-        try:
-            from cnki_downloader.utils.config import get_config_dir
-            cookie_dir = get_config_dir()
-        except Exception:
-            cookie_dir = Path.home() / ".cnki_downloader"
-            cookie_dir.mkdir(parents=True, exist_ok=True)
-        cookie_file = cookie_dir / "browser_state.json"
-
-        async with async_playwright() as pw:
-            # 检查已有 Cookie
-            ctx_kwargs = {
-                "viewport": {"width": 1400, "height": 900},
-                "user_agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-            }
-            if cookie_file.exists():
-                try:
-                    data = json.loads(cookie_file.read_text(encoding="utf-8"))
-                    if data.get("cookies"):
-                        ctx_kwargs["storage_state"] = str(cookie_file)
-                except Exception:
-                    pass
-
-            # 有头模式打开浏览器，让用户操作
-            browser = await pw.chromium.launch(headless=False, slow_mo=100)
-            context = await browser.new_context(**ctx_kwargs)
-            page = await context.new_page()
-
-            # 导航到知网首页（机构网络会自动识别）
-            await page.goto("https://www.cnki.net", timeout=30000)
-
-            # 等待用户操作完成 — 监测页面变化
-            # 当用户完成登录/认证后关闭浏览器窗口即可
-            try:
-                await page.wait_for_event("close", timeout=300000)
-            except Exception:
-                pass
-
-            # 保存 Cookie
-            cookie_file.parent.mkdir(parents=True, exist_ok=True)
-            state = await context.storage_state(path=str(cookie_file))
-            cookie_count = len(state.get("cookies", []))
-            await browser.close()
-
-            self.success.emit(f"机构认证完成，已保存 {cookie_count} 条 Cookie")
+        cookie_count = await complete_browser_verification()
+        self.success.emit(f"机构认证完成，已保存 {cookie_count} 条 Cookie")

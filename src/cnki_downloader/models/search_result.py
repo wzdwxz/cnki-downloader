@@ -20,6 +20,7 @@ class SearchQuery:
     page: int = 1
     page_size: int = 20
     source_types: str = ""  # 数据库类型过滤，如 "CJFQ" 仅期刊
+    language: str = ""  # 语言过滤: "zh"=中文, "en"=外文, ""=不限
 
 
 @dataclass

@@ -17,3 +17,6 @@ env/
 .vscode/
 *.part
 .pytest_cache/
+.playwright-browsers/
+tmp_download_test/
+.claude/

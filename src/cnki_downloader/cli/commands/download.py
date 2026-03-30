@@ -1,4 +1,4 @@
-"""cnki download — CLI下载命令，支持批量下载"""
+"""cnki download - CLI download command with batch support."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
+from cnki_downloader.cli.formatters import _sanitize_for_console
 from cnki_downloader.core.downloader import (
     ProgressCallback,
     batch_download,
@@ -29,8 +30,12 @@ from cnki_downloader.utils.config import load_config
 console = Console()
 
 
+def _safe_text(text: object) -> str:
+    return _sanitize_for_console(console, str(text))
+
+
 class RichProgress(ProgressCallback):
-    """使用Rich进度条的回调实现。"""
+    """Progress callback implementation backed by Rich progress bars."""
 
     def __init__(self, progress: Progress, task_id_map: dict[str, int]) -> None:
         self._progress = progress
@@ -39,7 +44,8 @@ class RichProgress(ProgressCallback):
     def on_progress(self, task_id: str, downloaded: int, total: int) -> None:
         if task_id not in self._task_map:
             self._task_map[task_id] = self._progress.add_task(
-                task_id[:40], total=total or 0
+                _safe_text(task_id[:40]),
+                total=total or 0,
             )
         rich_task = self._task_map[task_id]
         if total:
@@ -50,14 +56,14 @@ class RichProgress(ProgressCallback):
             self._progress.update(self._task_map[task_id], completed=100, total=100)
 
     def on_error(self, task_id: str, error: Exception) -> None:
-        console.print(f"[red]下载失败 [{task_id[:30]}]: {error}[/red]")
+        console.print(f"[red]下载失败 [{_safe_text(task_id[:30])}]: {_safe_text(error)}[/red]")
 
 
 def download_command(
     query: str = typer.Argument(..., help="搜索关键词或文献URL"),
     output: Path = typer.Option(None, "--output", "-o", help="输出目录"),
     index: int = typer.Option(
-        0, "--index", "-i", help="搜索结果中的序号（从1开始），0表示交互选择"
+        0, "--index", "-i", help="搜索结果中的序号（从1开始），0 表示交互选择"
     ),
     batch: bool = typer.Option(False, "--batch", "-b", help="批量下载所有搜索结果"),
     max_concurrent: int = typer.Option(3, "--concurrent", "-c", help="最大并发下载数"),
@@ -72,40 +78,33 @@ async def _download_async(
     query: str, output_dir: Path, index: int, batch: bool, max_concurrent: int
 ) -> None:
     async with SessionManager() as session:
-        # 如果输入的是URL，直接下载
         if query.startswith("http"):
             paper = Paper(title="download", url=query)
             await _download_single(session, paper, output_dir)
             return
 
-        # 搜索
-        with console.status(f"正在搜索 [bold]{query}[/bold] ..."):
-            search_query = SearchQuery(keyword=query)
-            result = await search(session, search_query)
+        with console.status(f"正在搜索 [bold]{_safe_text(query)}[/bold] ..."):
+            result = await search(session, SearchQuery(keyword=query))
 
         if not result.papers:
             console.print("[yellow]未找到相关文献[/yellow]")
             return
 
-        # 显示搜索结果
         for i, p in enumerate(result.papers, 1):
-            console.print(f"  [cyan]{i:2d}[/cyan]. {p.short_info()}")
+            console.print(f"  [cyan]{i:2d}[/cyan]. {_safe_text(p.short_info())}")
 
-        # 批量下载
         if batch:
             console.print(f"\n[bold]批量下载 {len(result.papers)} 篇文献...[/bold]")
             await _download_batch(session, result.papers, output_dir, max_concurrent)
             return
 
-        # 单篇选择下载
         if index > 0:
             selected = index
         else:
             selected = int(
-                typer.prompt("\n请输入要下载的文献序号（多篇用逗号分隔，如1,3,5）", default="1")
+                typer.prompt("请输入要下载的文献序号（默认1）", default="1")
             )
 
-        # 支持逗号分隔的多选
         indices_str = str(selected)
         if "," in indices_str:
             indices = [int(x.strip()) for x in indices_str.split(",")]
@@ -114,7 +113,9 @@ async def _download_async(
                 if 1 <= idx <= len(result.papers):
                     papers_to_download.append(result.papers[idx - 1])
             if papers_to_download:
-                await _download_batch(session, papers_to_download, output_dir, max_concurrent)
+                await _download_batch(
+                    session, papers_to_download, output_dir, max_concurrent
+                )
             return
 
         selected = int(indices_str)
@@ -122,14 +123,13 @@ async def _download_async(
             console.print("[red]无效的序号[/red]")
             return
 
-        paper = result.papers[selected - 1]
-        await _download_single(session, paper, output_dir)
+        await _download_single(session, result.papers[selected - 1], output_dir)
 
 
 async def _download_single(
     session: SessionManager, paper: Paper, output_dir: Path
 ) -> None:
-    console.print(f"\n正在下载: [bold]{paper.title}[/bold]")
+    console.print(f"\n正在下载: [bold]{_safe_text(paper.title)}[/bold]")
 
     progress = Progress(
         TextColumn("[bold blue]{task.description}"),
@@ -143,7 +143,7 @@ async def _download_single(
     with progress:
         file_path = await download_paper(session, paper, output_dir, callback)
 
-    console.print(f"\n[green]下载完成: {file_path}[/green]")
+    console.print(f"\n[green]下载完成: {_safe_text(file_path)}[/green]")
 
 
 async def _download_batch(
@@ -168,4 +168,4 @@ async def _download_batch(
 
     console.print(f"\n[green]批量下载完成: {len(paths)} / {len(papers)} 篇[/green]")
     for p in paths:
-        console.print(f"  {p}")
+        console.print(_safe_text(f"  {p}"))

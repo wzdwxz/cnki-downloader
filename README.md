@@ -1,16 +1,15 @@
 # CNKI 文献下载器
 
-一个集搜索、下载、格式转换、文献管理于一体的知网(CNKI)文献下载工具，提供 GUI 和 CLI 两种使用方式。
+一个集搜索、下载、格式转换于一体的知网(CNKI)文献下载工具，提供 MCP Server、GUI 和 CLI 三种使用方式。
 
 ## 功能特性
 
-- **文献搜索** — 关键词、作者、期刊、日期范围等多条件检索
+- **文献搜索** — 关键词、作者、期刊、日期范围、中/外文语言等多条件检索
 - **文献下载** — 单篇/批量下载，支持断点续传和并发控制
 - **格式转换** — CAJ 自动转 PDF（基于 caj2pdf / PyMuPDF）
-- **文献管理** — 收藏、分类目录、标签系统、本地搜索
-- **引用导出** — BibTeX、EndNote (.enw)、GB/T 7714-2015
-- **双接口** — PyQt6 图形界面 + Typer 命令行
-- **双认证** — 校园网直连 / 个人账号登录
+- **MCP Server** — 接入 Claude Desktop / Claude Code，用自然语言操作知网
+- **三接口** — MCP Server + PyQt6 图形界面 + Typer 命令行
+- **API 自适应** — 自动探测知网 API 版本变化（kns8s 等），无需手动更新
 
 ## 安装
 
@@ -23,7 +22,10 @@ pip install -e .
 # CLI + GUI
 pip install -e ".[gui]"
 
-# 全部功能（含 CAJ 转换 + 浏览器自动化）
+# MCP Server（供 Claude Desktop / Claude Code 调用）
+pip install -e ".[mcp]"
+
+# 全部功能（含 CAJ 转换 + 浏览器自动化 + MCP）
 pip install -e ".[all]"
 
 # 仅浏览器自动化
@@ -31,6 +33,50 @@ pip install -e ".[browser]"
 ```
 
 ## 快速开始
+
+### MCP Server
+
+将知网工具接入 Claude Desktop 或 Claude Code，用自然语言搜索、下载文献。
+
+**Claude Code 配置**（`.claude/settings.json`）：
+
+```json
+{
+  "mcpServers": {
+    "cnki": {
+      "command": "python",
+      "args": ["-m", "cnki_downloader.mcp_server"],
+      "cwd": "/path/to/cnki_downloader"
+    }
+  }
+}
+```
+
+**Claude Desktop 配置**（`claude_desktop_config.json`）：
+
+```json
+{
+  "mcpServers": {
+    "cnki": {
+      "command": "python",
+      "args": ["-m", "cnki_downloader.mcp_server"],
+      "cwd": "/path/to/cnki_downloader"
+    }
+  }
+}
+```
+
+**提供的工具：**
+
+| 工具 | 说明 |
+|------|------|
+| `cnki_search` | 多条件文献搜索（关键词、作者、期刊、日期、语言、文献类型） |
+| `cnki_download` | 按 URL 或关键词+序号下载，支持批量 |
+| `cnki_convert` | CAJ → PDF 格式转换 |
+| `cnki_auth_login` | 打开浏览器完成知网验证码认证 |
+| `cnki_auth_status` | 检查 Cookie 认证状态 |
+
+首次使用需调用 `cnki_auth_login` 完成浏览器认证，Cookie 自动保存后续免认证。
 
 ### 命令行
 
@@ -59,17 +105,6 @@ cnki auth logout
 # 删除保存的凭证
 cnki auth forget
 
-# 管理文献库
-cnki library list
-cnki library export --format bibtex --output refs.bib
-
-# 标签管理
-cnki library tag add <paper_id> "标签名"
-cnki library tag list
-
-# 分类管理
-cnki library category create "分类名"
-cnki library category list
 ```
 
 ### 图形界面
@@ -79,7 +114,7 @@ cnki gui              # 默认亮色主题
 cnki gui --theme dark  # 暗色主题
 ```
 
-GUI 提供搜索、下载管理、文献库、设置四个功能面板，支持亮/暗主题切换。
+GUI 提供搜索、下载管理、设置三个功能面板，支持亮/暗主题切换。
 
 ### 浏览器自动化批量搜索
 
@@ -184,22 +219,23 @@ python scripts/build.py
 | CLI | Typer + Rich |
 | CAJ 转换 | caj2pdf / PyMuPDF |
 | 浏览器自动化 | Playwright (Chromium) |
+| MCP Server | FastMCP (mcp SDK) |
 | 凭证存储 | keyring |
 | 打包 | PyInstaller |
 
 ## 项目架构
 
 ```
-Presentation (cli/ + gui/)     ← 可替换的薄壳
+Presentation (cli/ + gui/ + mcp_server.py)  ← 可替换的薄壳
        ↓
-Services (services/)           ← 编排层
+Services (services/)                        ← 编排层
        ↓
-Core (core/)                   ← 核心业务逻辑
+Core (core/)                                ← 核心业务逻辑（search, download, convert, api_probe）
        ↓
-Data (models/ + db/)           ← 数据模型 + SQLite 持久化
+Data (models/ + db/)                        ← 数据模型 + SQLite 持久化
 ```
 
-核心原则：core 层和 services 层完全不依赖 gui 或 cli。
+核心原则：core 层和 services 层完全不依赖 gui、cli 或 mcp_server。MCP Server 与 CLI/GUI 同级，均为 core 层的薄壳封装。
 
 ## 许可证
 

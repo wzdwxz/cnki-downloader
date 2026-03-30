@@ -96,7 +96,29 @@ class DownloadWorker(QThread):
                     else:
                         self.file_error.emit(task_id, "未找到下载链接或需要登录")
                 except Exception as e:
-                    self.file_error.emit(task_id, str(e)[:100])
+                    from cnki_downloader.core.exceptions import CaptchaRequiredError
+
+                    if isinstance(e, CaptchaRequiredError):
+                        # 验证码：关闭无头浏览器，用可见浏览器让用户完成验证
+                        await browser.close()
+                        browser = await pw.chromium.launch(headless=False)
+                        context = await browser.new_context(**ctx_kwargs)
+                        self.file_error.emit(
+                            task_id,
+                            "检测到验证码，已打开浏览器窗口，请完成验证后自动继续",
+                        )
+                        # 重试当前论文
+                        try:
+                            path = await self._download_one(
+                                context, paper, self._output_dir
+                            )
+                            if path:
+                                completed.append(path)
+                                self.file_completed.emit(task_id, str(path))
+                        except Exception as retry_e:
+                            self.file_error.emit(task_id, str(retry_e)[:100])
+                    else:
+                        self.file_error.emit(task_id, str(e)[:100])
 
                 # 下载间隔
                 await asyncio.sleep(1.5)
@@ -117,9 +139,20 @@ class DownloadWorker(QThread):
             await detail_page.goto(paper.url, timeout=30000)
             await asyncio.sleep(2)
 
-            # 检查验证码
+            # 检查验证码：自动等待用户在浏览器中完成验证
             if "verify" in detail_page.url:
-                raise RuntimeError("知网需要验证，请先通过「机构登录」完成认证")
+                from cnki_downloader.core.exceptions import CaptchaRequiredError
+
+                try:
+                    await detail_page.wait_for_url(
+                        lambda url: "verify" not in url,
+                        timeout=120_000,
+                    )
+                    await asyncio.sleep(1)
+                except Exception:
+                    raise CaptchaRequiredError(
+                        "知网验证超时，请先通过「机构登录」完成认证"
+                    )
 
             safe_title = re.sub(r'[<>:"/\\|?*]', '_', paper.title)[:80]
             output_path = output_dir / f"{safe_title}.pdf"
