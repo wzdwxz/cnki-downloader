@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from pathlib import Path
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from cnki_downloader.core.downloader import build_filename
 from cnki_downloader.models.paper import Paper
 
 
@@ -154,8 +154,8 @@ class DownloadWorker(QThread):
                         "知网验证超时，请先通过「机构登录」完成认证"
                     )
 
-            safe_title = re.sub(r'[<>:"/\\|?*]', '_', paper.title)[:80]
-            output_path = output_dir / f"{safe_title}.pdf"
+            safe_name = build_filename(paper, max_length=80)
+            output_path = output_dir / f"{safe_name}.pdf"
 
             # 已存在则跳过
             if output_path.exists():
