@@ -36,6 +36,23 @@ class NullProgress:
         pass
 
 
+def paper_from_url(url: str) -> Paper:
+    """从 CNKI 详情页 URL 解析出一个最小化的 Paper。
+
+    尽力从 querystring 中提取 dbname/dbcode 与 filename，以便后续命名
+    和直连下载都能拿到唯一标识，避免所有 URL 下载统一命名为 "download"。
+    """
+    # 知网 URL 里 dbname 和 dbcode 都可能出现，dbname 更完整（如 CJFDLAST），dbcode 是短码（CJFD）
+    dbname_match = re.search(r"[?&]dbname=([^&#]+)", url, re.IGNORECASE) or re.search(
+        r"[?&]dbcode=([^&#]+)", url, re.IGNORECASE
+    )
+    filename_match = re.search(r"[?&]filename=([^&#]+)", url, re.IGNORECASE)
+    dbname = dbname_match.group(1) if dbname_match else ""
+    filename = filename_match.group(1) if filename_match else ""
+    title = filename or "download"
+    return Paper(title=title, url=url, dbname=dbname, filename=filename)
+
+
 def _build_direct_download_url(paper: Paper, fmt: str = "pdf") -> str | None:
     """尝试从 dbname + filename 直接构造下载 URL，跳过详情页访问。
 
@@ -155,10 +172,10 @@ async def download_paper(
         else:
             ext = ".pdf"
 
-        # 构造安全文件名
-        safe_title = _sanitize_filename(paper.title)
-        output_path = output_dir / f"{safe_title}{ext}"
-        partial_path = output_dir / f"{safe_title}{ext}.part"
+        # 构造安全文件名：作者（年份）前三个单词
+        safe_name = build_filename(paper)
+        output_path = output_dir / f"{safe_name}{ext}"
+        partial_path = output_dir / f"{safe_name}{ext}.part"
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -285,3 +302,53 @@ def _sanitize_filename(name: str, max_length: int = 100) -> str:
     if len(name) > max_length:
         name = name[:max_length]
     return name or "untitled"
+
+
+_TITLE_SPLIT_RE = re.compile(r"[\s\-_:：;；,，、/\\|]+")
+
+
+def _first_words(title: str, count: int = 3) -> str:
+    """取标题前 N 个"单词"。空格分隔时按空格切；中文标题无空格时回退到前若干字符。"""
+    title = (title or "").strip()
+    if not title:
+        return ""
+    tokens = [t for t in _TITLE_SPLIT_RE.split(title) if t]
+    if len(tokens) >= 2:
+        return " ".join(tokens[:count])
+    # 无可切分空白：整条标题留给 max_length 截断
+    return title
+
+
+def build_filename(paper: Paper, max_length: int = 100) -> str:
+    """按 "作者(年份) 前三个单词" 规则构造下载文件名。
+
+    缺失字段时逐级回退，最后兜底到 CNKI filename / "untitled"，
+    保证批量下载时每篇论文都能拿到可区分的文件名，而不是统一叫 "download"。
+    """
+    author = paper.authors[0].strip() if paper.authors else ""
+    year = ""
+    if paper.publish_date:
+        m = re.search(r"(\d{4})", paper.publish_date)
+        if m:
+            year = m.group(1)
+
+    prefix = ""
+    if author and year:
+        prefix = f"{author}({year})"
+    elif author:
+        prefix = author
+    elif year:
+        prefix = f"({year})"
+
+    title_part = _first_words(paper.title)
+
+    if prefix and title_part:
+        name = f"{prefix} {title_part}"
+    else:
+        name = prefix or title_part
+
+    if not name:
+        # 最后兜底：CNKI 内部标识一定是唯一的
+        name = paper.cnki_id or paper.filename or "untitled"
+
+    return _sanitize_filename(name, max_length=max_length)

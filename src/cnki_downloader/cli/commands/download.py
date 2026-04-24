@@ -20,6 +20,7 @@ from cnki_downloader.core.downloader import (
     ProgressCallback,
     batch_download,
     download_paper,
+    paper_from_url,
 )
 from cnki_downloader.core.search import search
 from cnki_downloader.core.session import SessionManager
@@ -79,7 +80,7 @@ async def _download_async(
 ) -> None:
     async with SessionManager() as session:
         if query.startswith("http"):
-            paper = Paper(title="download", url=query)
+            paper = paper_from_url(query)
             await _download_single(session, paper, output_dir)
             return
 

@@ -157,10 +157,13 @@ async def cnki_download(
     Returns:
         下载结果，包含文件路径
     """
-    from cnki_downloader.core.downloader import batch_download, download_paper
+    from cnki_downloader.core.downloader import (
+        batch_download,
+        download_paper,
+        paper_from_url,
+    )
     from cnki_downloader.core.search import search
     from cnki_downloader.core.session import SessionManager
-    from cnki_downloader.models.paper import Paper
     from cnki_downloader.models.search_result import SearchQuery
 
     if not url and not keyword:
@@ -172,7 +175,7 @@ async def cnki_download(
     try:
         async with SessionManager() as session:
             if url:
-                paper = Paper(title="download", url=url)
+                paper = paper_from_url(url)
                 file_path = await download_paper(session, paper, out_path)
                 return {
                     "success": True,
